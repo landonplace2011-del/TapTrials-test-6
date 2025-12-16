@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tap Trials – Ultimate Monster</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Poppins:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#0b0f1f;
+  --panel:rgba(255,255,255,0.08);
+  --accent:#4ade80;
+  --accent2:#60a5fa;
+  --text:#e5e7eb;
+  --gold:#facc15;
+}
+*{box-sizing:border-box;font-family:'Poppins','Inter',system-ui,sans-serif;margin:0;padding:0;}
+body{background:radial-gradient(circle at top,#12183a,#05070f);color:var(--text);text-align:center;overflow-x:hidden;}
+#loading{position:fixed;inset:0;background:#05070f;display:flex;flex-direction:column;justify-content:center;align-items:center;z-index:9999;animation:fadeOut 1s ease forwards;animation-delay:3s;}
+#loading h1{font-size:48px;letter-spacing:2px;color:var(--accent);animation:pulse 2s infinite;}
+@keyframes pulse{0%{transform:scale(1)}50%{transform:scale(1.05)}100%{transform:scale(1)}}
+@keyframes fadeOut{to{opacity:0;pointer-events:none;}}
+.container{max-width:500px;margin:auto;padding:16px;}
+.panel{background:linear-gradient(180deg,var(--panel),transparent);border-radius:20px;padding:16px;margin-bottom:16px;box-shadow:0 12px 30px rgba(0,0,0,.4);}
+#clicks{font-size:42px;font-weight:800;margin:10px 0;color:var(--accent);}
+#tap{width:100%;padding:28px;font-size:28px;font-weight:800;border:none;border-radius:24px;background:linear-gradient(135deg,var(--accent),#22c55e);color:#06210f;cursor:pointer;transition:.08s;}
+#tap:active{transform:scale(.95);}
+.stats{display:flex;justify-content:space-between;opacity:.85;font-weight:600;margin-top:10px;}
+.tabs{display:flex;justify-content:space-between;margin-bottom:10px;}
+.tabs button{flex:1;margin:0 5px;padding:12px;border:none;border-radius:16px;background:var(--accent2);color:#081226;font-weight:700;cursor:pointer;transition:.2s;}
+.tabs button:hover{background:linear-gradient(135deg,var(--accent2),#3b82f6);}
+.hidden{display:none;}
+.upgrade{display:flex;justify-content:space-between;align-items:center;margin:8px 0;padding:10px;border-radius:14px;background:rgba(255,255,255,.06);}
+.upgrade button{background:var(--accent);border:none;border-radius:12px;padding:6px 14px;font-weight:700;cursor:pointer;transition:.15s;}
+.upgrade button:disabled{opacity:0.5;cursor:not-allowed;}
+.particle{position:absolute;pointer-events:none;font-weight:700;color:var(--accent);animation:floatUp .8s forwards;}
+@keyframes floatUp{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-60px);}}
+#energyContainer{width:100%;height:22px;background:rgba(255,255,255,.1);border-radius:12px;margin:10px 0;overflow:hidden;}
+#energy-bar{height:100%;width:100%;background:var(--accent);transition:width 0.05s linear;}
+#tab-click,#tab-auto,#tab-mult,#tab-prestige,#tab-special{max-height:350px;overflow-y:auto;}
+#prestige-container{margin-top:12px;}
+#prestige-button{padding:10px 20px;border:none;border-radius:14px;background:var(--gold);color:#081226;font-weight:700;cursor:pointer;transition:.15s;}
+#prestige-button:hover{background:#fcd34d;}
+</style>
+</head>
+<body>
+<div id="loading"><h1>Tap Trials</h1></div>
+<div class="container">
+<div class="panel">
+<h1>Tap Trials</h1>
+<div id="clicks">0</div>
+<button id="tap">TAP</button>
+<div id="energyContainer"><div id="energy-bar"></div></div>
+<div class="stats">
+<div>Power: <b id="power">1</b></div>
+<div>CPS: <b id="cps">0</b></div>
+<div>Prestige: <b id="prestige">0</b></div>
+</div>
+<div id="prestige-container">
+<button id="prestige-button">Prestige</button>
+</div>
+</div>
+
+<div class="panel tabs">
+<button onclick="showTab('click')">Click</button>
+<button onclick="showTab('auto')">Auto</button>
+<button onclick="showTab('mult')">Multipliers</button>
+<button onclick="showTab('prestige')">Prestige Upgrades</button>
+<button onclick="showTab('special')">Special</button>
+</div>
+
+<div class="panel" id="tab-click"></div>
+<div class="panel hidden" id="tab-auto"></div>
+<div class="panel hidden" id="tab-mult"></div>
+<div class="panel hidden" id="tab-prestige"></div>
+<div class="panel hidden" id="tab-special"></div>
+</div>
+
+<script>
+// ===== Data & Save =====
+let data = JSON.parse(localStorage.getItem("tapTrialsSave")) || {
+clicks:0,power:1,cps:0,prestige:0,lastActive:Date.now()
+};
+
+// ===== Utility Functions =====
+function fmt(n){if(n<1e3) return Math.floor(n);const s=["K","M","B","T","Qa","Qi"];let i=Math.floor(Math.log10(n)/3);return (n/Math.pow(1e3,i)).toFixed(2).replace(".00","")+s[i-1];}
+function particle(x,y,text){const p=document.createElement("div");p.className="particle";p.textContent=text;p.style.left=(x+Math.random()*10-5)+"px";p.style.top=(y+Math.random()*10-5)+"px";document.body.appendChild(p);setTimeout(()=>p.remove(),800);}
+
+// ===== Energy =====
+let energy=100,maxEnergy=100,energyDrainPerTap=10,drainSpeed=1;
+function drainEnergy(amount){const target=Math.max(energy-amount,0);function step(){if(energy>target){energy-=drainSpeed;if(energy<target) energy=target;updateEnergyUI();requestAnimationFrame(step);}}step();}
+function regenEnergy(){if(energy<maxEnergy){energy+=0.2;if(energy>maxEnergy) energy=maxEnergy;updateEnergyUI();}requestAnimationFrame(regenEnergy);}regenEnergy();
+function updateEnergyUI(){document.getElementById("energy-bar").style.width=`${(energy/maxEnergy)*100}%`;}
+
+// ===== Dynamic Upgrades =====
+const clickUpgrades=[],autoUpgrades=[],multUpgrades=[],prestigeUpgrades=[],specialUpgrades=[];
+for(let i=1;i<=200;i++){clickUpgrades.push({name:`Click +${i}`,cost:Math.floor(10*Math.pow(1.15,i)),add:i,type:'click'});}
+for(let i=1;i<=200;i++){autoUpgrades.push({name:`Auto +${i}`,cost:Math.floor(50*Math.pow(1.2,i)),add:i,type:'auto'});}
+for(let i=1;i<=50;i++){multUpgrades.push({name:`Multiplier x${1+i}`,cost:Math.floor(500*Math.pow(1.3,i)),add:0,type:'mult'});}
+for(let i=1;i<=50;i++){prestigeUpgrades.push({name:`Prestige Bonus +${i}%`,cost:Math.floor(1000*Math.pow(1.4,i)),add:0,type:'prestige'});}
+for(let i=1;i<=50;i++){specialUpgrades.push({name:`Special +${i}`,cost:Math.floor(2000*Math.pow(1.5,i)),add:0,type:'special'});}
+
+function renderUpgrades(type){
+const container=document.getElementById(`tab-${type}`);container.innerHTML=`<h2>${type==='click'?'Click':'auto'}</h2>`;
+let upgrades=[];switch(type){case 'click':upgrades=clickUpgrades;break;case 'auto':upgrades=autoUpgrades;break;case 'mult':upgrades=multUpgrades;break;case 'prestige':upgrades=prestigeUpgrades;break;case 'special':upgrades=specialUpgrades;break;}
+upgrades.forEach(u=>{const div=document.createElement("div");div.className="upgrade";div.innerHTML=`${u.name}<button ${data.clicks<u.cost?"disabled":""}>${fmt(u.cost)}</button>`;
+div.querySelector("button").onclick=()=>{if(data.clicks>=u.cost){data.clicks-=u.cost;if(u.type==='click') data.power+=u.add*(1+data.prestige*0.05);else if(u.type==='auto') data.cps+=u.add*(1+data.prestige*0.05);else if(u.type==='mult') data.power*=1.1;else if(u.type==='prestige') data.prestige+=1;else if(u.type==='special') data.cps+=u.add*2;u.cost=Math.floor(u.cost*1.8);update();}};container.appendChild(div);});}
+
+// ===== Tap Handler =====
+const tap=document.getElementById("tap");
+tap.addEventListener("pointerdown",e=>{if(energy>0){data.clicks+=data.power*(1+data.prestige*0.05);particle(e.clientX,e.clientY,"+"+fmt(Math.floor(data.power*(1+data.prestige*0.05))));drainEnergy(energyDrainPerTap);update();}});
+
+// ===== Prestige Button =====
+const prestigeBtn=document.getElementById("prestige-button");
+prestigeBtn.addEventListener("click",()=>{const cost=Math.floor(500*Math.pow(1.5,data.prestige));if(data.clicks>=cost&&confirm(`Prestige costs ${fmt(cost)} clicks. Proceed?`)){data.clicks-=cost;data.prestige+=1;data.power=1;data.cps=0;clickUpgrades.forEach(u=>{u.cost=Math.floor(10*Math.pow(1.15,parseInt(u.name.split('+')[1])));});autoUpgrades.forEach(u=>{u.cost=Math.floor(50*Math.pow(1.2,parseInt(u.name.split('+')[1])));});update();}});
+
+// ===== Offline Earnings =====
+const now=Date.now();const elapsed=Math.floor((now-data.lastActive)/1000);data.clicks+=elapsed*data.cps;data.lastActive=now;
+
+// ===== Update =====
+function update(){
+document.getElementById("clicks").textContent=fmt(Math.floor(data.clicks));
+document.getElementById("power").textContent=fmt(Math.floor(data.power));
+document.getElementById("cps").textContent=fmt(Math.floor(data.cps));
+document.getElementById("prestige").textContent=data.prestige;
+data.lastActive=Date.now();
+localStorage.setItem("tapTrialsSave",JSON.stringify(data));
+renderUpgrades("click");
+renderUpgrades("auto");
+renderUpgrades("mult");
+renderUpgrades("prestige");
+renderUpgrades("special");
+}
+
+function showTab(t){
+document.getElementById("tab-click").classList.add("hidden");
+document.getElementById("tab-auto").classList.add("hidden");
+document.getElementById("tab-mult").classList.add("hidden");
+document.getElementById("tab-prestige").classList.add("hidden");
+document.getElementById("tab-special").classList.add("hidden");
+document.getElementById(`tab-${t}`).classList.remove("hidden");
+}
+
+// ===== CPS Interval =====
+setInterval(()=>{if(energy>0){data.clicks+=data.cps;update();}},1000);
+
+update();
+</script>
+</body>
+</html>
